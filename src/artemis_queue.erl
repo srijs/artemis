@@ -61,35 +61,32 @@ code_change(_, State, _) ->
 
 % peek at the next job in the queue
 
-peek_job({_, Tree}) ->
+peek_job(State = {_, Tree}) ->
   case gb_trees:is_empty(Tree) of
     true  -> empty;
-    false -> peek_job_nonempty(Tree)
+    false -> peek_job_nonempty(State)
   end.
 
-peek_job_nonempty(Tree) ->
+peek_job_nonempty({Dict, Tree}) ->
   {_, Queue} = gb_trees:smallest(Tree),
-  queue:get(Queue).
+  Id = queue:get(Queue),
+  dict:fetch(Id, Dict).
 
 
 % pop the next job from the queue
 
-take_job({Dict, Tree}) ->
-  Result = case gb_trees:is_empty(Tree) of
+take_job(State = {_, Tree}) ->
+  case gb_trees:is_empty(Tree) of
     true  -> empty;
-    false -> take_job_nonempty(Tree)
-  end,
-  case Result of
-    empty        -> empty;
-    {Job, Queue} -> {Job, {delete_job_from_dict(Job, Dict),
-                           delete_job_from_tree(Job, Queue, Tree)}}
+    false -> take_job_nonempty(State)
   end.
 
-take_job_nonempty(Tree) ->
+take_job_nonempty({Dict, Tree}) ->
   {_, Queue} = gb_trees:smallest(Tree),
-  case queue:out(Queue) of
-    {{value, Job}, NewQueue} -> {Job, NewQueue}
-  end.
+  {{value, Id}, NewQueue} = queue:out(Queue),
+  Job = dict:fetch(Id, Dict),
+  {Job, {delete_job_from_dict(Job, Dict),
+         delete_job_from_tree(Job, NewQueue, Tree)}}.
 
 delete_job_from_tree({_, Prio, _, _}, Queue, Tree) ->
   case queue:is_empty(Queue) of
@@ -122,9 +119,9 @@ insert_job(Job = {Id, _, _, _}, {Dict, Tree}) ->
 insert_job_into_dict(Job = {Id, _, _, _}, Dict) ->
   dict:store(Id, Job, Dict).
 
-insert_job_into_tree(Job = {_, Prio, _ ,_}, Tree) ->
+insert_job_into_tree({Id, Prio, _ ,_}, Tree) ->
   Jobs = case gb_trees:lookup(Prio, Tree) of
     none           -> queue:new();
     {value, Queue} -> Queue
   end,
-  gb_trees:enter(Prio, queue:in(Job, Jobs), Tree).
+  gb_trees:enter(Prio, queue:in(Id, Jobs), Tree).
