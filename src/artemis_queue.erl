@@ -6,19 +6,19 @@
 -export([handle_info/2, terminate/2, code_change/3]).
 
 % simple public interface
--export([start/0, put/1, get/1, pop/0, peek/0]).
+-export([start/0, put/2, get/2, pop/1, peek/1]).
 
 
 
-start() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+start() -> gen_server:start_link(artemis_queue, [], []).
 
-put(Job) -> gen_server:call(?MODULE, {put, Job}).
+put(Pid, Job) -> gen_server:call(Pid, {put, Job}).
 
-get(Id) -> gen_server:call(?MODULE, {get, Id}).
+get(Pid, Id) -> gen_server:call(Pid, {get, Id}).
 
-pop() -> gen_server:call(?MODULE, {pop}).
+pop(Pid) -> gen_server:call(Pid, {pop}).
 
-peek() -> gen_server:call(?MODULE, {peek}).
+peek(Pid) -> gen_server:call(Pid, {peek}).
 
 
 
