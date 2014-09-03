@@ -1,6 +1,10 @@
 -module(artemis_queue).
 -behaviour(gen_server).
 
+-include("records.hrl").
+
+-record(state, {dict, tree}).
+
 % internal gen_server callback functions
 -export([init/1, handle_call/3, handle_cast/2]).
 -export([handle_info/2, terminate/2, code_change/3]).
@@ -23,7 +27,7 @@ peek(Pid) -> gen_server:call(Pid, {peek}).
 
 
 init(_) ->
-  {ok, {dict:new(), gb_trees:empty()}}.
+  {ok, #state{dict=dict:new(), tree=gb_trees:empty()}}.
 
 handle_call({put, Job}, _, State) ->
   case insert_job(Job, State) of
@@ -61,13 +65,13 @@ code_change(_, State, _) ->
 
 % peek at the next job in the queue
 
-peek_job(State = {_, Tree}) ->
+peek_job(State = #state{tree=Tree}) ->
   case gb_trees:is_empty(Tree) of
     true  -> empty;
     false -> peek_job_nonempty(State)
   end.
 
-peek_job_nonempty({Dict, Tree}) ->
+peek_job_nonempty(#state{dict=Dict, tree=Tree}) ->
   {_, Queue} = gb_trees:smallest(Tree),
   Id = queue:get(Queue),
   dict:fetch(Id, Dict).
@@ -75,32 +79,32 @@ peek_job_nonempty({Dict, Tree}) ->
 
 % pop the next job from the queue
 
-take_job(State = {_, Tree}) ->
+take_job(State = #state{tree=Tree}) ->
   case gb_trees:is_empty(Tree) of
     true  -> empty;
     false -> take_job_nonempty(State)
   end.
 
-take_job_nonempty({Dict, Tree}) ->
+take_job_nonempty(#state{dict=Dict, tree=Tree}) ->
   {_, Queue} = gb_trees:smallest(Tree),
   {{value, Id}, NewQueue} = queue:out(Queue),
   Job = dict:fetch(Id, Dict),
-  {Job, {delete_job_from_dict(Job, Dict),
-         delete_job_from_tree(Job, NewQueue, Tree)}}.
+  {Job, #state{dict=delete_job_from_dict(Job, Dict),
+               tree=delete_job_from_tree(Job, NewQueue, Tree)}}.
 
-delete_job_from_tree({_, Prio, _, _}, Queue, Tree) ->
+delete_job_from_tree(#job{prio=Prio}, Queue, Tree) ->
   case queue:is_empty(Queue) of
     true  -> gb_trees:delete(Prio, Tree);
     false -> gb_trees:update(Prio, Queue, Tree)
   end.
 
-delete_job_from_dict({Id, _, _, _}, Dict) ->
+delete_job_from_dict(#job{id=Id}, Dict) ->
   dict:erase(Id, Dict).
 
 
 % retrieve a job by id
 
-get_job(Id, {Dict, _}) ->
+get_job(Id, #state{dict=Dict}) ->
   case dict:find(Id, Dict) of
     {ok, Job} -> Job;
     error     -> error
@@ -109,17 +113,17 @@ get_job(Id, {Dict, _}) ->
 
 % insert a job into the queue
 
-insert_job(Job = {Id, _, _, _}, {Dict, Tree}) ->
+insert_job(Job = #job{id=Id}, #state{dict=Dict, tree=Tree}) ->
   case dict:is_key(Id, Dict) of
     true  -> exists;
-    false -> {insert_job_into_dict(Job, Dict),
-              insert_job_into_tree(Job, Tree)}
+    false -> #state{dict=insert_job_into_dict(Job, Dict),
+                    tree=insert_job_into_tree(Job, Tree)}
   end.
 
-insert_job_into_dict(Job = {Id, _, _, _}, Dict) ->
+insert_job_into_dict(Job = #job{id=Id}, Dict) ->
   dict:store(Id, Job, Dict).
 
-insert_job_into_tree({Id, Prio, _ ,_}, Tree) ->
+insert_job_into_tree(#job{id=Id, prio=Prio}, Tree) ->
   Jobs = case gb_trees:lookup(Prio, Tree) of
     none           -> queue:new();
     {value, Queue} -> Queue

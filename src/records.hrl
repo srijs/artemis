@@ -1,0 +1,1 @@
+-record(job, {id, prio, entities=[]}).
